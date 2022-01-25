@@ -55,7 +55,7 @@ def get_contract(contract_name, params=None, account=None):
     return contract
 
 
-def deploy_lottery(account=None):
+def deploy_lottery(account=None, test_duration=None, test_participants=None, test_management_fee=None):
     account = account if account else get_account()
     price_feed = get_contract('eth_usd_address', account=account)
     link_token = get_contract('link_token', account=account)
@@ -63,9 +63,9 @@ def deploy_lottery(account=None):
     vrf_fee = config["networks"][network.show_active()].get('vrf_fee')
     vrf_keyhash = config["networks"][network.show_active()].get('vrf_keyhash')
     usd_entry_fee = Web3.toWei(config['lottery'].get('entrance_fee'), "ether")
-    max_duration = config['lottery'].get('max_duration')
-    max_participants = config['lottery'].get('max_participants')
-    management_fee = config['lottery'].get('management_fee')
+    max_duration = test_duration if test_duration else config['lottery'].get('max_duration')
+    max_participants = test_participants if test_participants else config['lottery'].get('max_participants')
+    management_fee = test_management_fee if test_management_fee else config['lottery'].get('management_fee')
     print("Loaded all external dependencies")
     lottery = Lottery.deploy(usd_entry_fee,
                              max_duration,
@@ -97,22 +97,7 @@ def enter_lottery():
     print("Entered the lottery!")
 
 
-def end_lottery():
-    account = get_account()
-    lottery = Lottery[-1]
-    # fund the lottery contract with some LINK tokens, in order to pay the oracles
-    tx = fund_contract_with_link(lottery.address, get_contract("link_token").address, account, 10 ** 17)
-    # now that the contract is sufficiently funded, we can end the lottery
-    lottery.endLottery({"from": account}).wait(1)
-    time_passed = 0
-    while (lottery.lotteryState() == 2) and (time_passed < CHAINLINK_TIMEOUT):
-        time.sleep(CHAINLINK_REFERSH_RATE)
-        time_passed += CHAINLINK_REFERSH_RATE
-    print(f"Ended the lottery! The winner is {lottery.latestWinner()}")
-
-
 def main():
     deploy_lottery()
     start_lottery()
     enter_lottery()
-    end_lottery()

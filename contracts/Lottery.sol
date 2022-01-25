@@ -23,8 +23,8 @@ contract Lottery is VRFConsumerBase, KeeperCompatibleInterface, Ownable {
     uint256 internal immutable vrfFee; // fee to pay to the VRF provider, for randomness
     AggregatorV3Interface internal priceFeed; // Price feed provider
     uint256 internal lastTimestamp; // when the last lottery started
-
     // public
+
     LotteryState public lotteryState; // state of the lottery (open, closed, calculating)
     address payable[] public players; // all the players who bought a ticket
     address payable[] public winners; // all the winners, so far
@@ -87,9 +87,16 @@ contract Lottery is VRFConsumerBase, KeeperCompatibleInterface, Ownable {
         lotteryState = LotteryState.OPEN;
     }
 
-    function endLottery() public onlyOwner {
-        // only the owner can stop the lottery
-        require(lotteryState == LotteryState.OPEN, "Can't stop the lottery: none open yet.");
+    function canLotteryEnd() internal view returns(bool) {
+        bool isLotteryOpen = lotteryState == LotteryState.OPEN;
+        bool isOvertime = (block.timestamp - lastTimestamp) > maxDuration;
+        bool maxParticipantsReached = players.length >= maxParticipants;
+
+        return (isOvertime || maxParticipantsReached) && (players.length >= 2) && isLotteryOpen;
+    }
+
+    function endLottery() internal {
+        require(canLotteryEnd(), "Conditions to end the lottery are not met.");
         lotteryState = LotteryState.CALCULATING_WINNER;
 
         // random number request
@@ -97,33 +104,46 @@ contract Lottery is VRFConsumerBase, KeeperCompatibleInterface, Ownable {
         emit RequestedRandomness(requestId);
     }
 
-    function getPlayersCount() public view returns(uint count) {
-        return players.length;
-    }
-
-    function fulfillRandomness(bytes32 requestId, uint256 _randomness) internal override {
-        // we're overriding the super class → this function will be called by the VRF coordinator
-        require(lotteryState == LotteryState.CALCULATING_WINNER, "Lottery still open / closed");
-        require(_randomness > 0, "Random number not found");
+    function distributePool(uint256 _randomness) internal {
         uint256 winnerIx = _randomness % players.length;
+        // assign winner variable
         latestWinner = players[winnerIx];
         winners.push(latestWinner);
-        latestWinner.transfer(address(this).balance);
+        // determine the final prize
+        uint totalPool = address(this).balance;
+        uint managementFeeAmount = totalPool * managementFee / 100;
+        uint prizeAmount = totalPool - managementFeeAmount;
+        // distribute
+        latestWinner.transfer(prizeAmount);
+        payable(owner()).transfer(managementFeeAmount);
         // reset lottery
         players = new address payable[](0);
         lotteryState = LotteryState.CLOSED;
         _latestRandomness = _randomness;
     }
 
-    // Keeper
+    function getPlayersCount() public view returns(uint count) {
+        return players.length;
+    }
+
+    // VRF callback
+
+    function fulfillRandomness(bytes32 requestId, uint256 _randomness) internal override {
+        // we're overriding the super class → this function will be called by the VRF coordinator
+        require(lotteryState == LotteryState.CALCULATING_WINNER, "Lottery still open / closed");
+        require(_randomness > 0, "Random number not found");
+        distributePool(_randomness);
+    }
+
+    // Keeper callbacks
+
     function checkUpkeep(bytes calldata /* checkData */) external override returns (bool upkeepNeeded, bytes memory /* performData */) {
-        upkeepNeeded = (block.timestamp - lastTimestamp) > maxDuration;
-        // todo min participants are 2
+        upkeepNeeded = canLotteryEnd();
     }
 
     function performUpkeep(bytes calldata /* performData */) external override {
-        // todo checkUpkeep here too
-        lastTimestamp = block.timestamp;
+        require(canLotteryEnd(), "Conditions to end the lottery are not met.");
+        endLottery();
     }
 
 }
