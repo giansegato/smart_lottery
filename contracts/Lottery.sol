@@ -5,35 +5,50 @@ pragma solidity ^0.8.0;
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
+import "contracts/Utils.sol";
 
 
-contract Lottery is VRFConsumerBase, Ownable {
+contract Lottery is VRFConsumerBase, KeeperCompatibleInterface, Ownable {
 
     enum LotteryState {OPEN, CLOSED, CALCULATING_WINNER}
-
-    uint256 internal usdEntryFee;
-    AggregatorV3Interface internal priceFeed;
-    address payable[] public players;
-    LotteryState public lotteryState;
-    uint256 public vrfFee;
-    bytes32 public vrfKeyHash;
-    address payable[] public winners;
-    address payable public latestWinner;
-    uint256 public _latestRandomness;
     event RequestedRandomness(bytes32 requestId);
 
-    constructor(uint256 _usdEntryFee, address _priceFeedAddress,
+    // internals / configuration
+    uint256 internal immutable maxDuration; // how long should the lottery last (in seconds)
+    uint256 internal immutable maxParticipants; // maximum number of participants
+    uint256 internal immutable managementFee; // the fee that the owner takes as the lottery ends (proportion, base 100)
+    uint256 internal immutable usdEntryFee; // entry fee (in USD, 18 decimals)
+    bytes32 internal immutable vrfKeyHash; // key hash to provide to the VRF provider
+    uint256 internal immutable vrfFee; // fee to pay to the VRF provider, for randomness
+    AggregatorV3Interface internal priceFeed; // Price feed provider
+    uint256 internal lastTimestamp; // when the last lottery started
+
+    // public
+    LotteryState public lotteryState; // state of the lottery (open, closed, calculating)
+    address payable[] public players; // all the players who bought a ticket
+    address payable[] public winners; // all the winners, so far
+    address payable public latestWinner; // the last winner (corresponds to winners[-1])
+    uint256 public _latestRandomness; // last randomness (to vet the validity of the winner picking)
+
+
+    constructor(uint256 _usdEntryFee, uint256 _maxDuration, uint256 _maxParticipants, uint256 _managementFee,
+        address _priceFeedAddress,
         address _vrfCoordinator, address _link, uint256 _vrfFee,
         bytes32 _keyHash) public
     VRFConsumerBase(
         _vrfCoordinator, _link
     ) {
-        usdEntryFee = _usdEntryFee; // must have 18 decimals
+        usdEntryFee = _usdEntryFee;
+        maxDuration = _maxDuration;
+        maxParticipants = _maxParticipants;
+        managementFee = _managementFee;
         latestWinner = payable(address(0x0000000000000000000000000000000000000000000000000000000000000000));
         priceFeed = AggregatorV3Interface(_priceFeedAddress);
         lotteryState = LotteryState.CLOSED;
         vrfFee = _vrfFee;
         vrfKeyHash = _keyHash;
+        lastTimestamp = block.timestamp;
     }
 
     function enter() public payable {
@@ -100,25 +115,15 @@ contract Lottery is VRFConsumerBase, Ownable {
         _latestRandomness = _randomness;
     }
 
-    // useful stuff
-    function toString(uint256 value) internal pure returns (string memory) {
-        // from https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Strings.sol#L15-L35
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
+    // Keeper
+    function checkUpkeep(bytes calldata /* checkData */) external override returns (bool upkeepNeeded, bytes memory /* performData */) {
+        upkeepNeeded = (block.timestamp - lastTimestamp) > maxDuration;
+        // todo min participants are 2
+    }
+
+    function performUpkeep(bytes calldata /* performData */) external override {
+        // todo checkUpkeep here too
+        lastTimestamp = block.timestamp;
     }
 
 }

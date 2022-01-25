@@ -28,4 +28,7 @@ networks:
     vrf_fee: 100000000000000000
     verify: True
 lottery:
-  entrance_fee: 50000000000000000000
+  entrance_fee: 50
+  management_fee: 2
+  max_participants: 100
+  max_duration: 86400

@@ -62,9 +62,15 @@ def deploy_lottery(account=None):
     vrf_coordinator = get_contract('vrf_coordinator', params=[link_token.address], account=account)
     vrf_fee = config["networks"][network.show_active()].get('vrf_fee')
     vrf_keyhash = config["networks"][network.show_active()].get('vrf_keyhash')
-    usd_entry_fee = config['lottery'].get('entrance_fee')
+    usd_entry_fee = Web3.toWei(config['lottery'].get('entrance_fee'), "ether")
+    max_duration = config['lottery'].get('max_duration')
+    max_participants = config['lottery'].get('max_participants')
+    management_fee = config['lottery'].get('management_fee')
     print("Loaded all external dependencies")
     lottery = Lottery.deploy(usd_entry_fee,
+                             max_duration,
+                             max_participants,
+                             management_fee,
                              price_feed.address,
                              vrf_coordinator.address,
                              link_token.address,

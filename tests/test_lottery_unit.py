@@ -5,7 +5,6 @@ from scripts.deploy_lottery import deploy_lottery, contract_to_mock, get_contrac
 from web3 import Web3
 
 # Note: skip these test if we're not testing locally with mocks
-skip = network.show_active() not in LOCAL_DEV_CHAINS
 
 
 def test_get_entrance_fee():
@@ -16,7 +15,7 @@ def test_get_entrance_fee():
     mocked_eth_rate = contract_to_mock['eth_usd_address']['params']['1_initial_value'] * (
             10 ** (18 - contract_to_mock['eth_usd_address']['params']['0_decimals'])
     )
-    usd_entry_fee = config['lottery'].get('entrance_fee')
+    usd_entry_fee = Web3.toWei(config['lottery'].get('entrance_fee'), "ether")
     # Act
     entrance_fee = lottery.getEntranceFee()
     expected_entry_fee = Web3.toWei(usd_entry_fee / mocked_eth_rate, "ether")
