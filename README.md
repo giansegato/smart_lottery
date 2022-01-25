@@ -1,8 +1,8 @@
 # Smart Lottery
 
-Smart-contract simple lottery.
+Simple lottery where a pool of players enter paying an entrance fee, and when it ends the whole pool (minus a management fee) goes to the winner.
 
-The owner of the contract (defined as the one deploying the contract) can start the lottery. Once it starts, it's no longer his own lottery.
+Only the owner of the contract (defined as the one deploying the contract) can start the lottery. Once it starts, it's no longer in control of the owner.
 
 If the lottery has started, anyone can buy a 50$ ticket in. The sum of all the tickets make the overall winning poll.
 
